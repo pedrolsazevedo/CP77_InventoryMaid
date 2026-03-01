@@ -55,14 +55,17 @@ function grenadeUI.draw(InventoryMaid)
     grenadeUI.updateSubOptions(InventoryMaid, changed, "filterValue")
 -- End Sell filter value selection
 
--- Sell qualitys selection
-    if ImGui.BeginListBox("Sell qualities", 292, 70) then
-		ImGui.SetWindowFontScale(1.0)
-        InventoryMaid.settings.grenadeSettings.sellQualitys.common = ImGui.Selectable("Sell common", InventoryMaid.settings.grenadeSettings.sellQualitys.common)
-		InventoryMaid.settings.grenadeSettings.sellQualitys.uncommon = ImGui.Selectable("Sell uncommon", InventoryMaid.settings.grenadeSettings.sellQualitys.uncommon)
-		InventoryMaid.settings.grenadeSettings.sellQualitys.rare = ImGui.Selectable("Sell rare", InventoryMaid.settings.grenadeSettings.sellQualitys.rare)
-		InventoryMaid.settings.grenadeSettings.sellQualitys.epic = ImGui.Selectable("Sell epic", InventoryMaid.settings.grenadeSettings.sellQualitys.epic)
-		ImGui.EndListBox()
+-- Sell qualitys selection (labels reflect 2.x tier system; grenades max at Tier 4)
+    if ImGui.BeginListBox("Sell qualities", 292, 88) then
+        ImGui.SetWindowFontScale(1.0)
+        local sq = InventoryMaid.settings.grenadeSettings.sellQualitys
+        sq.tier1 = ImGui.Selectable("Sell Tier 1 (White)",  sq.tier1 or sq.common   or false)
+        sq.tier2 = ImGui.Selectable("Sell Tier 2 (Green)",  sq.tier2 or sq.uncommon or false)
+        sq.tier3 = ImGui.Selectable("Sell Tier 3 (Blue)",   sq.tier3 or sq.rare     or false)
+        sq.tier4 = ImGui.Selectable("Sell Tier 4 (Purple)", sq.tier4 or sq.epic     or false)
+        -- Clear old keys so they don't interfere after first save
+        sq.common = nil sq.uncommon = nil sq.rare = nil sq.epic = nil
+        ImGui.EndListBox()
     end
 -- End Sell qualitys selection
 

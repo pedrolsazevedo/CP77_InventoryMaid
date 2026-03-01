@@ -80,16 +80,19 @@ function weaponUI.draw(InventoryMaid)
     weaponUI.updateSubOptions(InventoryMaid, changed, "filterValue")
 -- End Sell filter value selection
 
--- Sell qualitys selection
-    if ImGui.BeginListBox("Sell qualities", 292, 105) then
-		ImGui.SetWindowFontScale(1.0)
-        InventoryMaid.settings.weaponSettings.sellQualitys.common = ImGui.Selectable("Sell common", InventoryMaid.settings.weaponSettings.sellQualitys.common)
-		InventoryMaid.settings.weaponSettings.sellQualitys.uncommon = ImGui.Selectable("Sell uncommon", InventoryMaid.settings.weaponSettings.sellQualitys.uncommon)
-		InventoryMaid.settings.weaponSettings.sellQualitys.rare = ImGui.Selectable("Sell rare", InventoryMaid.settings.weaponSettings.sellQualitys.rare)
-		InventoryMaid.settings.weaponSettings.sellQualitys.epic = ImGui.Selectable("Sell epic", InventoryMaid.settings.weaponSettings.sellQualitys.epic)
-        InventoryMaid.settings.weaponSettings.sellQualitys.legendary = ImGui.Selectable("Sell legendary", InventoryMaid.settings.weaponSettings.sellQualitys.legendary)
-        InventoryMaid.settings.weaponSettings.sellQualitys.iconic = ImGui.Selectable("Sell iconic", InventoryMaid.settings.weaponSettings.sellQualitys.iconic)
-		ImGui.EndListBox()
+-- Sell qualitys selection (labels reflect 2.x tier system)
+    if ImGui.BeginListBox("Sell qualities", 292, 120) then
+        ImGui.SetWindowFontScale(1.0)
+        local sq = InventoryMaid.settings.weaponSettings.sellQualitys
+        sq.tier1 = ImGui.Selectable("Sell Tier 1 (White)",  sq.tier1 or sq.common    or false)
+        sq.tier2 = ImGui.Selectable("Sell Tier 2 (Green)",  sq.tier2 or sq.uncommon  or false)
+        sq.tier3 = ImGui.Selectable("Sell Tier 3 (Blue)",   sq.tier3 or sq.rare      or false)
+        sq.tier4 = ImGui.Selectable("Sell Tier 4 (Purple)", sq.tier4 or sq.epic      or false)
+        sq.tier5 = ImGui.Selectable("Sell Tier 5 (Orange)", sq.tier5 or sq.legendary or false)
+        sq.iconic = ImGui.Selectable("Sell Iconic (always protected)", sq.iconic or false)
+        -- Clear old keys so they don't interfere after first save
+        sq.common = nil sq.uncommon = nil sq.rare = nil sq.epic = nil sq.legendary = nil
+        ImGui.EndListBox()
     end
 -- End Sell qualitys selection
 

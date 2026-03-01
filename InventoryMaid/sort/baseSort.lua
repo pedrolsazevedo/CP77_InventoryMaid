@@ -167,7 +167,13 @@ function baseSort.removeQualitys(InventoryMaid, list)
         local vItemID    = v:GetID()
         local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
         local statObj    = v:GetStatsObjectID()
-        local quality    = baseSort.ss:GetStatValue(statObj, 'Quality')
+        -- FIX 2.x: Use math.floor() to normalize "+" and "++" tier variants.
+        --   Tier 1   = 0    Tier 1+ = 0.x  -> floor = 0
+        --   Tier 2   = 1    Tier 2+ = 1.x  -> floor = 1
+        --   Tier 3   = 2    Tier 3+ = 2.x  -> floor = 2
+        --   Tier 4   = 3    Tier 4+ = 3.x  -> floor = 3
+        --   Tier 5   = 4    Tier 5+ = 4.x  -> floor = 4
+        local quality    = math.floor(baseSort.ss:GetStatValue(statObj, 'Quality'))
         local iconic     = baseSort.ss:GetStatValue(statObj, 'IsItemIconic')
         local area       = itemRecord:EquipArea():Type().value
 
@@ -177,16 +183,26 @@ function baseSort.removeQualitys(InventoryMaid, list)
             print("[InventoryMaid] Protecting iconic item: " .. tostring(v:GetNameAsString()))
         elseif area == "Weapon" then
             local ws = InventoryMaid.settings.weaponSettings.sellQualitys
-            if not ((ws.common and quality == 0) or (ws.uncommon and quality == 1) or
-                    (ws.rare   and quality == 2) or (ws.epic    and quality == 3) or
-                    (ws.legendary and quality == 4)) then
+            -- Keys renamed tier1-tier5 in 2.x; fall back to old key names for
+            -- users who have existing saves from the pre-2.x version of the mod
+            if not (
+                ((ws.tier1 or ws.common)     and quality == 0) or
+                ((ws.tier2 or ws.uncommon)   and quality == 1) or
+                ((ws.tier3 or ws.rare)       and quality == 2) or
+                ((ws.tier4 or ws.epic)       and quality == 3) or
+                ((ws.tier5 or ws.legendary)  and quality == 4)
+            ) then
                 table.insert(toRemove, v)
             end
         else
             local as = InventoryMaid.settings.armorSettings.sellQualitys
-            if not ((as.common and quality == 0) or (as.uncommon and quality == 1) or
-                    (as.rare   and quality == 2) or (as.epic     and quality == 3) or
-                    (as.legendary and quality == 4)) then
+            if not (
+                ((as.tier1 or as.common)     and quality == 0) or
+                ((as.tier2 or as.uncommon)   and quality == 1) or
+                ((as.tier3 or as.rare)       and quality == 2) or
+                ((as.tier4 or as.epic)       and quality == 3) or
+                ((as.tier5 or as.legendary)  and quality == 4)
+            ) then
                 table.insert(toRemove, v)
             end
         end

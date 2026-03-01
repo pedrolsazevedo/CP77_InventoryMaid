@@ -48,9 +48,20 @@ function grenades.handleGrenadeType(InventoryMaid, action)
     for _, v in ipairs(items) do
         local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](v:GetID())
         local statObj = v:GetStatsObjectID()
-        local quality = grenades.ss:GetStatValue(statObj, 'Quality')
-        if ((InventoryMaid.settings.grenadeSettings.sellQualitys.common and quality == 0) or (InventoryMaid.settings.grenadeSettings.sellQualitys.uncommon and quality == 1) or (InventoryMaid.settings.grenadeSettings.sellQualitys.rare and quality == 2) or (InventoryMaid.settings.grenadeSettings.sellQualitys.epic and quality == 3)) then
-            table.insert(grenades.grenadesList[itemRecord:FriendlyName()], v) 
+        -- FIX 2.x: math.floor() normalizes T1+/T2+ fractional quality values
+        local quality = math.floor(grenades.ss:GetStatValue(statObj, 'Quality'))
+        local sq = InventoryMaid.settings.grenadeSettings.sellQualitys
+        -- Fall back to old key names (common/uncommon/rare/epic) for existing saves
+        if (
+            ((sq.tier1 or sq.common)   and quality == 0) or
+            ((sq.tier2 or sq.uncommon) and quality == 1) or
+            ((sq.tier3 or sq.rare)     and quality == 2) or
+            ((sq.tier4 or sq.epic)     and quality == 3)
+        ) then
+            local key = itemRecord:FriendlyName()
+            if grenades.grenadesList[key] then
+                table.insert(grenades.grenadesList[key], v)
+            end
         end
         itemsBefore = itemsBefore + grenades.ts:GetItemQuantity(grenades.player, v:GetID())
     end
