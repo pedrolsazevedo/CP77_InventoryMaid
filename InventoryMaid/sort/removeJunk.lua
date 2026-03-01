@@ -192,55 +192,98 @@ removeJunk.items = {
 }
 
 function removeJunk.sellJunkType(tpe, percent)
-    local ts = Game.GetTransactionSystem()
-    local itemCnt = 0
-    for _, v in ipairs(removeJunk.items[tpe]) do
-        local itemTDBID = TweakDBID.new(v)
-        local itemID = ItemID.new(itemTDBID)
-        local currentItemCount = math.floor(ts:GetItemQuantity(Game.GetPlayer(), itemID) * (percent / 100))
-        ts:RemoveItem(Game.GetPlayer(), itemID, currentItemCount)
-        itemCnt = itemCnt + currentItemCount
-    end
+    local ok, err = pcall(function()
+        local ts      = Game.GetTransactionSystem()
+        local player  = Game.GetPlayer()
+        local itemCnt = 0
 
-    local moneyGained = 0
-    if itemCnt > 0 then
-        moneyGained = (removeJunk.price[tpe]) * itemCnt
-        Game.AddToInventory("Items.money", moneyGained)
+        for _, v in ipairs(removeJunk.items[tpe]) do
+            local itemTDBID = TweakDBID.new(v)
+            local itemID    = ItemID.new(itemTDBID)
+
+            -- SAFETY: Skip if this junk item has a Quest tag (e.g. story-critical items)
+            if ts:HasTag(player, "Quest", itemID) then
+                print("[InventoryMaid] Skipping quest junk item: " .. v)
+            else
+                local currentItemCount = math.floor(ts:GetItemQuantity(player, itemID) * (percent / 100))
+                if currentItemCount > 0 then
+                    ts:RemoveItem(player, itemID, currentItemCount)
+                    itemCnt = itemCnt + currentItemCount
+                end
+            end
+        end
+
+        local moneyGained = 0
+        if itemCnt > 0 then
+            moneyGained = removeJunk.price[tpe] * itemCnt
+            Game.AddToInventory("Items.money", moneyGained)
+            print(string.format("[InventoryMaid] Sold %d junk (%s) for %d credits.", itemCnt, tpe, moneyGained))
+        end
+    end)
+    if not ok then
+        print("[InventoryMaid] ERROR in sellJunkType(" .. tpe .. "): " .. tostring(err))
     end
 end
 
 function removeJunk.dissasembleJunkType(tpe, percent)
-    local craftingSystem = Game.GetScriptableSystemsContainer():Get(CName.new('CraftingSystem'))
-    local ts = Game.GetTransactionSystem()
-    for _, v in ipairs(removeJunk.items[tpe]) do
-        local itemTDBID = TweakDBID.new(v)
-        local itemID = ItemID.new(itemTDBID)
-        local currentItemCount = math.floor(ts:GetItemQuantity(Game.GetPlayer(), itemID) * (percent / 100))
-        craftingSystem:DisassembleItem(Game.GetPlayer(), itemID, currentItemCount)
-    end
+    local ok, err = pcall(function()
+        local craftingSystem = Game.GetScriptableSystemsContainer():Get(CName.new('CraftingSystem'))
+        local ts     = Game.GetTransactionSystem()
+        local player = Game.GetPlayer()
+        local count  = 0
 
+        for _, v in ipairs(removeJunk.items[tpe]) do
+            local itemTDBID = TweakDBID.new(v)
+            local itemID    = ItemID.new(itemTDBID)
+
+            -- SAFETY: Skip quest-tagged junk
+            if ts:HasTag(player, "Quest", itemID) then
+                print("[InventoryMaid] Skipping quest junk item: " .. v)
+            else
+                local currentItemCount = math.floor(ts:GetItemQuantity(player, itemID) * (percent / 100))
+                if currentItemCount > 0 then
+                    craftingSystem:DisassembleItem(player, itemID, currentItemCount)
+                    count = count + currentItemCount
+                end
+            end
+        end
+
+        if count > 0 then
+            print(string.format("[InventoryMaid] Disassembled %d junk (%s).", count, tpe))
+        end
+    end)
+    if not ok then
+        print("[InventoryMaid] ERROR in dissasembleJunkType(" .. tpe .. "): " .. tostring(err))
+    end
 end
 
 function removeJunk.previewType(tpe, percent)
-    info = {count = 0, money = 0, afterCount = 0}
-    local ts = Game.GetTransactionSystem()
-    local itemCnt = 0
-    local beforeItem = 0
-    for _, v in ipairs(removeJunk.items[tpe]) do
-        local itemTDBID = TweakDBID.new(v)
-        local itemID = ItemID.new(itemTDBID)
-        beforeItem = beforeItem + ts:GetItemQuantity(Game.GetPlayer(), itemID)
-        local currentItemCount = math.floor(ts:GetItemQuantity(Game.GetPlayer(), itemID) * (percent / 100))
-        itemCnt = itemCnt + currentItemCount
-    end
+    local info = {count = 0, money = 0, afterCount = 0}
+    local ok, err = pcall(function()
+        local ts         = Game.GetTransactionSystem()
+        local player     = Game.GetPlayer()
+        local itemCnt    = 0
+        local beforeItem = 0
 
-    local moneyGained = 0
-    if itemCnt > 0 then
-        moneyGained = (removeJunk.price[tpe]) * itemCnt
+        for _, v in ipairs(removeJunk.items[tpe]) do
+            local itemTDBID = TweakDBID.new(v)
+            local itemID    = ItemID.new(itemTDBID)
+            -- SAFETY: Skip quest items in preview too so count is accurate
+            if not ts:HasTag(player, "Quest", itemID) then
+                local qty = ts:GetItemQuantity(player, itemID)
+                beforeItem = beforeItem + qty
+                itemCnt    = itemCnt + math.floor(qty * (percent / 100))
+            end
+        end
+
+        local moneyGained = itemCnt > 0 and (removeJunk.price[tpe] * itemCnt) or 0
+        info.count     = beforeItem
+        info.money     = moneyGained
+        info.afterCount = beforeItem - itemCnt
+    end)
+    if not ok then
+        print("[InventoryMaid] ERROR in previewType(" .. tpe .. "): " .. tostring(err))
     end
-    info.count = beforeItem
-    info.money = moneyGained
-    info.afterCount = beforeItem - itemCnt
     return info
 end
 
