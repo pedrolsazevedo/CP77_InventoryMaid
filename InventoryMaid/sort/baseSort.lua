@@ -11,20 +11,24 @@ baseSort.slots = {
     "Weapon"
 }
 
-baseSort.ssc = Game.GetScriptableSystemsContainer()
-baseSort.equipmentSystem = baseSort.ssc:Get("EquipmentSystem")
-baseSort.ps = Game.GetPlayerSystem()	
-baseSort.player = baseSort.ps:GetLocalPlayerMainGameObject()
-baseSort.espd = baseSort.equipmentSystem:GetPlayerData(baseSort.player)
-baseSort.ss = Game.GetStatsSystem()
-baseSort.ts = Game.GetTransactionSystem()
-
+-- FIX 2.31: All game API calls moved into init() so they run inside
+-- a function scope after the game is ready, not at require() time.
 baseSort.equippedList = {weapons = {}, armor = {}}
 baseSort.weaponList = {listAll = {}, listTypes = {}}
 baseSort.armorList = {listAll = {}, listTypes = {}}
 baseSort.nItems = 0
-
 baseSort.finalSellList = {}
+
+function baseSort.init()
+    baseSort.ps  = Game.GetPlayerSystem()
+    baseSort.player = baseSort.ps:GetLocalPlayerMainGameObject()
+    baseSort.ssc = Game.GetScriptableSystemsContainer()
+    -- FIX 2.31: CName.new() required for GetScriptableSystem lookups
+    baseSort.equipmentSystem = baseSort.ssc:Get(CName.new('EquipmentSystem'))
+    baseSort.espd = baseSort.equipmentSystem:GetPlayerData(baseSort.player)
+    baseSort.ss  = Game.GetStatsSystem()
+    baseSort.ts  = Game.GetTransactionSystem()
+end
 
 function baseSort.avgEquipped(type)
 	avg = 0
@@ -43,8 +47,15 @@ function baseSort.avgEquipped(type)
 	end
 end
 
-function baseSort.getItemLists(InventoryMaid) -- Fills the list for equipped items, weapons and armor
-	_, itemList = baseSort.ts:GetItemListByTags(baseSort.player, baseSort.slots, itemList)
+function baseSort.getItemLists(InventoryMaid)
+    -- FIX 2.31: GetItemListByTags now returns just the array (no bool prefix)
+    local itemList = baseSort.ts:GetItemListByTags(baseSort.player, baseSort.slots)
+    -- Fallback: if it returned a bool+table (old API), unwrap it
+    if type(itemList) == "boolean" then
+        _, itemList = baseSort.ts:GetItemListByTags(baseSort.player, baseSort.slots)
+    end
+    if not itemList then itemList = {} end
+
 	n = 1
 	for _,v in ipairs(itemList) do
 		baseSort.nItems = baseSort.nItems + 1
@@ -67,7 +78,6 @@ function baseSort.getItemLists(InventoryMaid) -- Fills the list for equipped ite
 				table.insert(baseSort.armorList.listAll, v)
 			end
 		end
-
 	end
 end
 
@@ -144,7 +154,6 @@ function baseSort.removeQualitys(InventoryMaid, list)
 				table.insert(toRemove, v)
 			end
 		end
-
 	end
 
 	for _, v in pairs(toRemove) do
@@ -174,7 +183,6 @@ function baseSort.generateTypeLists(InventoryMaid)
 		t = itemRecord:ItemType():Type().value
 		table.insert(baseSort.armorList.listTypes[t], v)
 	end
-
 end
 
 function baseSort.filterSellType(InventoryMaid, list, cat)
@@ -265,15 +273,12 @@ function baseSort.keepTopX(InventoryMaid, list, typeList)
 					end
 				end
 			end
-
 		end
-
 	end
 
 	for _, v in pairs(rmList) do
 		tableFunctions.removeItem(list, v)
 	end
-
 end
 
 function baseSort.worstXPercent(InventoryMaid, list, typeList)
@@ -315,9 +320,7 @@ function baseSort.worstXPercent(InventoryMaid, list, typeList)
 					end
 				end
 			end
-
 		end
-
 	end
 
 	for _, v in pairs(rmList) do
@@ -326,24 +329,21 @@ function baseSort.worstXPercent(InventoryMaid, list, typeList)
 end
 
 function baseSort.sellWorseAvg(InventoryMaid, list, typeList)
-length = tableFunctions.getLength(list)
-if length ~= 0 then
---Get armor / weapon list
-	statType = ""
+	length = tableFunctions.getLength(list)
+	if length ~= 0 then
+		statType = ""
+		vItemID = list[1]:GetID()	
+		itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
+		area = itemRecord:EquipArea():Type().value
+		if area == "Weapon" then
+			statType = "EffectiveDPS"
+		else
+			statType = "Armor"
+		end
 
-	vItemID = list[1]:GetID()	
-	itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
-	area = itemRecord:EquipArea():Type().value
-	if area == "Weapon" then
-		statType = "EffectiveDPS"
-	else
-		statType = "Armor"
-	end
---End Get armor / weapon list
-	
-	rmList = {}
-	avgStat = baseSort.avgEquipped(statType)
-	
+		rmList = {}
+		avgStat = baseSort.avgEquipped(statType)
+		
 		if typeList then
 			if not baseSort.getItemSettings(InventoryMaid, list[1]).sellAll then
 				xVal = baseSort.getItemSettings(InventoryMaid, list[1]).filterValuePercent
@@ -372,28 +372,29 @@ if length ~= 0 then
 				end
 			end
 		end
-	
-	for _, v in pairs(rmList) do
-		tableFunctions.removeItem(list, v)
-	end
 
-end
+		for _, v in pairs(rmList) do
+			tableFunctions.removeItem(list, v)
+		end
+	end
 end
 
 function baseSort.generateSellList(InventoryMaid)
 	baseSort.resetLists()
-	tableFunctions = require ("utility/tableFunctions.lua")
+	tableFunctions = require("utility/tableFunctions.lua")
+    -- FIX 2.31: init() called here, inside a function, not at module level
+    baseSort.init()
 
 	baseSort.getItemLists(InventoryMaid)
 
-	table.sort(baseSort.weaponList.listAll, baseSort.sortFilter) --Sort by stat
+	table.sort(baseSort.weaponList.listAll, baseSort.sortFilter)
 	table.sort(baseSort.armorList.listAll, baseSort.sortFilter)
 
-	baseSort.removeQualitys(InventoryMaid, baseSort.weaponList.listAll) --Remove qualitys the user wants to keep
+	baseSort.removeQualitys(InventoryMaid, baseSort.weaponList.listAll)
 	baseSort.removeQualitys(InventoryMaid, baseSort.armorList.listAll)
 
-	baseSort.filterSellType(InventoryMaid,  baseSort.armorList.listAll, "Armor") --Remove item types the user wants to keep
-	baseSort.filterSellType(InventoryMaid,  baseSort.weaponList.listAll, "Weapon")
+	baseSort.filterSellType(InventoryMaid, baseSort.armorList.listAll, "Armor")
+	baseSort.filterSellType(InventoryMaid, baseSort.weaponList.listAll, "Weapon")
 
 	baseSort.generateTypeLists(InventoryMaid)
 
@@ -410,7 +411,6 @@ function baseSort.generateSellList(InventoryMaid)
 				table.insert(baseSort.finalSellList, x)
 			end
 		end
-
 	else
 		if InventoryMaid.settings.weaponSettings.sellFilter == 0 then
 			baseSort.keepTopX(InventoryMaid, baseSort.weaponList.listAll, false)
@@ -454,5 +454,3 @@ function baseSort.generateSellList(InventoryMaid)
 end
 
 return baseSort
-
---apply filter per list if sell at all: no remove it, sell at all + not sell all apply normal filter, sell at all + sell all do nothing leave on list

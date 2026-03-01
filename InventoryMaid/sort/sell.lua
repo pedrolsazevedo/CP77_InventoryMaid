@@ -2,7 +2,7 @@ sell = {}
 
 function sell.sell(InventoryMaid)
     local ts = Game.GetTransactionSystem()
-    baseSort = require ("sort/baseSort.lua")
+    baseSort = require("sort/baseSort.lua")
     baseSort.generateSellList(InventoryMaid)
 
     Game.AddToInventory("Items.money", sell.calculateMoney())
@@ -10,7 +10,7 @@ function sell.sell(InventoryMaid)
         ts:RemoveItem(Game.GetPlayer(), v:GetID(), 1)
     end  
 
-    removeJunk = require ("sort/removeJunk.lua")
+    removeJunk = require("sort/removeJunk.lua")
     removeJunk.sellJunk(InventoryMaid)  
 
     grenades = require("sort/grenades")
@@ -18,7 +18,7 @@ function sell.sell(InventoryMaid)
 end 
 
 function sell.disassemble(InventoryMaid)
-    baseSort = require ("sort/baseSort.lua")
+    baseSort = require("sort/baseSort.lua")
     baseSort.generateSellList(InventoryMaid)
 
     for _, v in ipairs(baseSort.finalSellList) do
@@ -26,7 +26,7 @@ function sell.disassemble(InventoryMaid)
         craftingSystem:DisassembleItem(Game.GetPlayer(), v:GetID(), 1)
     end  
 
-    removeJunk = require ("sort/removeJunk.lua")
+    removeJunk = require("sort/removeJunk.lua")
     removeJunk.dissasembleJunk(InventoryMaid) 
 
     grenades = require("sort/grenades")
@@ -36,7 +36,8 @@ end
 function sell.calculateMoney()
     sellPrice = 0
     local ssc = Game.GetScriptableSystemsContainer()
-    local espd = ssc:Get("EquipmentSystem"):GetPlayerData(Game.GetPlayer())
+    -- FIX 2.31: CName.new() required for GetScriptableSystem lookups
+    local espd = ssc:Get(CName.new('EquipmentSystem')):GetPlayerData(Game.GetPlayer())
     local imgr = espd:GetInventoryManager()
     for _, v in ipairs(baseSort.finalSellList) do
         sellPrice = sellPrice + imgr:GetSellPrice(Game.GetPlayer(), v:GetID())
@@ -45,10 +46,14 @@ function sell.calculateMoney()
 end
 
 function sell.preview(InventoryMaid)
-    removeJunk = require ("sort/removeJunk.lua")
-    baseSort = require ("sort/baseSort.lua")
+    local money = 0
+    local nItems = 0
+    local nItemsAfter = 0
+
+    removeJunk = require("sort/removeJunk.lua")
+    baseSort = require("sort/baseSort.lua")
     grenades = require("sort/grenades")
-    tableFunctions = require ("utility/tableFunctions.lua")
+    tableFunctions = require("utility/tableFunctions.lua")
     baseSort.generateSellList(InventoryMaid)
     nItems = baseSort.nItems
     nItemsAfter = nItems - tableFunctions.getLength(baseSort.finalSellList)
@@ -63,7 +68,7 @@ function sell.preview(InventoryMaid)
     nItems = nItems + grenadesInfo.count
     nItemsAfter = nItemsAfter + grenadesInfo.afterCount
 
-    return string.format("Items currently: %d, After: %d, \nMoney gained: %d",nItems, nItemsAfter, money)
+    return string.format("Items currently: %d, After: %d, \nMoney gained: %d", nItems, nItemsAfter, money)
 end
 
 return sell

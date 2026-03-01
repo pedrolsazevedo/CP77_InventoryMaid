@@ -2,7 +2,7 @@ InventoryMaid = {}
 
 function InventoryMaid:new()
 registerForEvent("onInit", function()
-    
+
     function InventoryMaid.fileExists(filename)
         local f=io.open(filename,"r")
         if (f~=nil) then io.close(f) return true else return false end
@@ -13,12 +13,11 @@ registerForEvent("onInit", function()
     end
 
     function InventoryMaid.loadStandardFile()
-        
         local file = io.open("saves/startup.json", "r")
-        local slot = json.decode(file:read("*a"))   
-        file:close()   
+        local slot = json.decode(file:read("*a"))
+        file:close()
         InventoryMaid.standardSlot = slot
-        
+
         if slot ~= 0 then
             local file = io.open("saves/slot"..slot..".json", "r")
             local config = json.decode(file:read("*a"))
@@ -27,13 +26,11 @@ registerForEvent("onInit", function()
         end
     end
 
- 	InventoryMaid.CPS = require ("CPStyling.lua")
- 	InventoryMaid.theme = InventoryMaid.CPS
-    InventoryMaid.color = InventoryMaid.CPS
+    InventoryMaid.CPS = require("CPStyling")
 
-    InventoryMaid.baseUI = require ("ui/baseUI.lua")
-    tableFunctions = require ("utility/tableFunctions.lua")
-    
+    InventoryMaid.baseUI = require("ui/baseUI.lua")
+    tableFunctions = require("utility/tableFunctions.lua")
+
     drawWindow = false
     drawWindowOneFrameSell = false
     drawWindowOneFrameDissasemble = false
@@ -56,7 +53,7 @@ registerForEvent("onInit", function()
                                                                        [13] = {displayName = "Hammer", typeName = "Wea_Hammer", sellType = true, sellAll = false, filterValuePercent = 20, filterValueTopX = 3},
                                                                        [14] = {displayName = "One handed club", typeName = "Wea_OneHandedClub", sellType = true, sellAll = false, filterValuePercent = 20, filterValueTopX = 3},
                                                                        [15] = {displayName = "Two handed club", typeName = "Wea_TwoHandedClub", sellType = true, sellAll = false, filterValuePercent = 20, filterValueTopX = 3}}},
-                                      armorSettings = {sellArmor = true, sellPerType = true, sellFilter = 0,  filterValueTopX = 3, filterValuePercent = 20, sellQualitys = {common = true, uncommon = true, rare = false, epic = false, legendary = false, iconic = false}, forceSubOptionsUpdate = false,
+                                      armorSettings = {sellArmor = true, sellPerType = true, sellFilter = 0, filterValueTopX = 3, filterValuePercent = 20, sellQualitys = {common = true, uncommon = true, rare = false, epic = false, legendary = false, iconic = false}, forceSubOptionsUpdate = false,
                                                         typeOptions = { [1] = {displayName = "Head", typeName = "Clo_Head", sellType = true, sellAll = false, filterValuePercent = 20, filterValueTopX = 3},
                                                                         [2] = {displayName = "Face", typeName = "Clo_Face", sellType = true, sellAll = false, filterValuePercent = 20, filterValueTopX = 3},
                                                                         [3] = {displayName = "Outer torso", typeName = "Clo_OuterChest", sellType = true, sellAll = false, filterValuePercent = 20, filterValueTopX = 3},
@@ -75,10 +72,9 @@ registerForEvent("onInit", function()
                                                       [7] = {displayName = "Cutting Grenade", typeName = "cutting", sellType = false, sellAll = false, filterValuePercent = 20}}}
                                 }
 
-    
     InventoryMaid.resetSettings()
     InventoryMaid.loadStandardFile()
-    
+
 end)
 
 registerForEvent("onDraw", function()
@@ -105,13 +101,23 @@ registerForEvent("onOverlayClose", function()
     drawWindow = false
 end)
 
-registerHotkey("inventoryMaidSell", "Sell selected", function()	
-	drawWindowOneFrameSell = true
+-- FIX 2.31: registerHotkey was removed in newer CET versions.
+-- Hotkeys are now defined via the Bindings tab in the CET overlay.
+-- Using pcall so the mod still loads even if registerHotkey is missing.
+local hotkeyOk, hotkeyErr = pcall(function()
+    registerHotkey("inventoryMaidSell", "Sell selected", function()
+        drawWindowOneFrameSell = true
+    end)
+    registerHotkey("inventoryMaidDisassemble", "Disassemble selected", function()
+        drawWindowOneFrameDissasemble = true
+    end)
 end)
 
-registerHotkey("inventoryMaidDisassemble", "Disassemble selected", function()	
-	drawWindowOneFrameDissasemble = true
-end)
+if not hotkeyOk then
+    -- registerHotkey not available in this CET version - hotkeys disabled.
+    -- Use the Sell / Disassemble buttons in the UI window instead.
+    print("[InventoryMaid] Note: registerHotkey not available in this CET version. Use the UI buttons instead.")
+end
 
 end
 

@@ -1,13 +1,7 @@
 grenades = {}
 
-grenades.ts = Game.GetTransactionSystem()
-grenades.ps = Game.GetPlayerSystem()	
-grenades.player = grenades.ps:GetLocalPlayerMainGameObject()
-grenades.ssc = Game.GetScriptableSystemsContainer();
-grenades.ss = Game.GetStatsSystem()
-grenades.equipmentSystem = grenades.ssc:Get("EquipmentSystem");
-grenades.espd = grenades.equipmentSystem:GetPlayerData(grenades.player);
-grenades.imgr = grenades.espd:GetInventoryManager();
+-- FIX 2.31: All game API calls moved into grenades.init() so they run
+-- inside a function scope after the game is ready, not at require() time.
 grenades.grenadesList = {["frag"] = {},
                         ["emp"] = {},
                         ["incendiary_grenade"] = {},
@@ -16,33 +10,52 @@ grenades.grenadesList = {["frag"] = {},
                         ["recon"] = {},
                         ["cutting"] = {}}
 
+function grenades.init()
+    grenades.ts   = Game.GetTransactionSystem()
+    grenades.ps   = Game.GetPlayerSystem()
+    grenades.player = grenades.ps:GetLocalPlayerMainGameObject()
+    grenades.ssc  = Game.GetScriptableSystemsContainer()
+    grenades.ss   = Game.GetStatsSystem()
+    -- FIX 2.31: CName.new() required for GetScriptableSystem lookups
+    grenades.equipmentSystem = grenades.ssc:Get(CName.new('EquipmentSystem'))
+    grenades.espd = grenades.equipmentSystem:GetPlayerData(grenades.player)
+    grenades.imgr = grenades.espd:GetInventoryManager()
+end
 
 function grenades.handleGrenadeType(InventoryMaid, action)
+    -- FIX 2.31: init() called here, inside a function
+    grenades.init()
+
     grenades.grenadesList = {["frag"] = {},
                         ["emp"] = {},
                         ["incendiary_grenade"] = {},
                         ["flash"] = {},
                         ["biohazard"] = {},
                         ["recon"] = {},
-                        ["cutting"] = {}} -- Reset the list
+                        ["cutting"] = {}}
 
     local moneyGained = 0  
     local itemsBefore = 0
     local itemsAfter = 0
 
-    local _, items = grenades.ts:GetItemListByTag(grenades.player, "Grenade")
-    
-    for _, v in ipairs(items) do -- Get all grenade stacks in the inventory and insert them into grenadesList, sorted by type, removing unwanted qualitys
+    -- FIX 2.31: GetItemListByTag now returns just the array (no bool prefix)
+    local items = grenades.ts:GetItemListByTag(grenades.player, "Grenade")
+    if type(items) == "boolean" then
+        _, items = grenades.ts:GetItemListByTag(grenades.player, "Grenade")
+    end
+    if not items then items = {} end
+
+    for _, v in ipairs(items) do
         local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](v:GetID())
         local statObj = v:GetStatsObjectID()
-	    local quality = grenades.ss:GetStatValue(statObj, 'Quality')
+        local quality = grenades.ss:GetStatValue(statObj, 'Quality')
         if ((InventoryMaid.settings.grenadeSettings.sellQualitys.common and quality == 0) or (InventoryMaid.settings.grenadeSettings.sellQualitys.uncommon and quality == 1) or (InventoryMaid.settings.grenadeSettings.sellQualitys.rare and quality == 2) or (InventoryMaid.settings.grenadeSettings.sellQualitys.epic and quality == 3)) then
             table.insert(grenades.grenadesList[itemRecord:FriendlyName()], v) 
         end
         itemsBefore = itemsBefore + grenades.ts:GetItemQuantity(grenades.player, v:GetID())
     end
     
-    for _, value in pairs(grenades.grenadesList) do -- Sort the type lists by type qualitys, to sell the grenades with lower quality first
+    for _, value in pairs(grenades.grenadesList) do
         table.sort(value, grenades.sortFilter)  
     end
 
@@ -51,14 +64,14 @@ function grenades.handleGrenadeType(InventoryMaid, action)
     for key, value in pairs(grenades.grenadesList) do
         local numType = 0
 
-        for _, v in pairs(value) do -- Get the total number of grenades per category that shoud get sold
+        for _, v in pairs(value) do
             numType = numType + grenades.ts:GetItemQuantity(grenades.player, v:GetID()) * (grenades.getTypeSettings(InventoryMaid, v).filterValuePercent / 100)
         end
 
         numType = math.floor(numType)
         
         for _, v in pairs(value) do 
-            if grenades.getTypeSettings(InventoryMaid, v).sellType then -- Only do stuff if the type is allowed to get sold
+            if grenades.getTypeSettings(InventoryMaid, v).sellType then
                 local sellPrice = grenades.imgr:GetSellPrice(grenades.player, v:GetID())
                 local itemQuantity = grenades.ts:GetItemQuantity(grenades.player, v:GetID())
 
@@ -70,9 +83,6 @@ function grenades.handleGrenadeType(InventoryMaid, action)
                     itemQuantity = grenades.ts:GetItemQuantity(grenades.player, v:GetID())
                 end
 
-                --statObj = v:GetStatsObjectID()
-                --local currentQuality = grenades.ss:GetStatValue(statObj, 'Quality')
-                --print(key, itemQuantity, currentQuality, grenades.getTypeSettings(InventoryMaid, v).typeName, grenades.getTypeSettings(InventoryMaid, v).sellType)
                 moneyGained = moneyGained + sellPrice * itemQuantity
                 numType = numType - itemQuantity
 
@@ -109,7 +119,6 @@ end
 function grenades.sortFilter(left, right)
     statL = left:GetStatsObjectID()
     statR = right:GetStatsObjectID()
-
     return grenades.ss:GetStatValue(statL, 'Quality') < grenades.ss:GetStatValue(statR, 'Quality')
 end
 
