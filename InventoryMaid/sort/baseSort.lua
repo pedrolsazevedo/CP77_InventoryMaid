@@ -1,82 +1,81 @@
-baseSort = {}
+-- =============================================================
+--  baseSort.lua
+--  Builds the list of items to sell/disassemble based on the
+--  user's filter settings.
+--
+--  CODE QUALITY: All variables are local. No bare globals.
+-- =============================================================
+local baseSort = {}
 
 baseSort.slots = {
-    "FeetClothing",
-    "HeadArmor",
-    "ChestArmor",
-    "InnerChest",
-    "InnerChestArmor",
-    "FaceArmor",
-    "LegArmor",
-    "Weapon"
+    "FeetClothing", "HeadArmor", "ChestArmor",
+    "InnerChest", "InnerChestArmor", "FaceArmor",
+    "LegArmor", "Weapon"
 }
 
-baseSort.equippedList  = {weapons = {}, armor = {}}
-baseSort.weaponList    = {listAll = {}, listTypes = {}}
-baseSort.armorList     = {listAll = {}, listTypes = {}}
+baseSort.equippedList  = { weapons = {}, armor = {} }
+baseSort.weaponList    = { listAll = {}, listTypes = {} }
+baseSort.armorList     = { listAll = {}, listTypes = {} }
 baseSort.nItems        = 0
 baseSort.finalSellList = {}
 
 -- ---------------------------------------------------------------
---  Init: called at the start of generateSellList(), never at
---  module level so game systems are always ready.
+--  init(): resolve all game systems. Called at the start of
+--  generateSellList() so systems are always ready.
 -- ---------------------------------------------------------------
 function baseSort.init()
-    baseSort.ps             = Game.GetPlayerSystem()
-    baseSort.player         = baseSort.ps:GetLocalPlayerMainGameObject()
-    baseSort.ssc            = Game.GetScriptableSystemsContainer()
+    baseSort.ps              = Game.GetPlayerSystem()
+    baseSort.player          = baseSort.ps:GetLocalPlayerMainGameObject()
+    baseSort.ssc             = Game.GetScriptableSystemsContainer()
     baseSort.equipmentSystem = baseSort.ssc:Get(CName.new('EquipmentSystem'))
-    baseSort.espd           = baseSort.equipmentSystem:GetPlayerData(baseSort.player)
-    baseSort.ss             = Game.GetStatsSystem()
-    baseSort.ts             = Game.GetTransactionSystem()
+    baseSort.espd            = baseSort.equipmentSystem:GetPlayerData(baseSort.player)
+    baseSort.ss              = Game.GetStatsSystem()
+    baseSort.ts              = Game.GetTransactionSystem()
 end
 
 -- ---------------------------------------------------------------
---  SAFETY: Checks whether an item should be protected from
---  selling/disassembling. Returns true if the item is safe to
---  sell, false + reason string if it should be skipped.
+--  isSafeToSell(): central safety gate. Returns false + reason
+--  string if the item must not be sold/disassembled.
 -- ---------------------------------------------------------------
 function baseSort.isSafeToSell(itemData, vItemID)
-    -- 1. Equipped item protection
     if baseSort.espd:IsEquipped(vItemID) then
         return false, "equipped"
     end
-
-    -- 2. Quest tag check
     if baseSort.ts:HasTag(baseSort.player, "Quest", vItemID) then
         return false, "quest"
     end
-
-    -- 3. Iconic item check (extra safety — only skips if iconic sell is OFF)
     local statObj = itemData:GetStatsObjectID()
-    local iconic  = baseSort.ss:GetStatValue(statObj, 'IsItemIconic')
-    if iconic == 1 then
+    if baseSort.ss:GetStatValue(statObj, 'IsItemIconic') == 1 then
         return false, "iconic"
     end
-
     return true, nil
 end
 
+-- ---------------------------------------------------------------
+--  avgEquipped(): average stat value across equipped items.
+--  Guards against division by zero on empty lists.
+-- ---------------------------------------------------------------
 function baseSort.avgEquipped(statType)
-    local avg = 0
-    if statType == "EffectiveDPS" then
-        for _, v in ipairs(baseSort.equippedList.weapons) do
-            local stat = v:GetStatsObjectID()
-            avg = avg + baseSort.ss:GetStatValue(stat, 'EffectiveDPS')
-        end
-        local len = tableFunctions.getLength(baseSort.equippedList.weapons)
-        return len > 0 and (avg / len) or 0
-    else
-        for _, v in ipairs(baseSort.equippedList.armor) do
-            local stat = v:GetStatsObjectID()
-            avg = avg + baseSort.ss:GetStatValue(stat, 'Armor')
-        end
-        local len = tableFunctions.getLength(baseSort.equippedList.armor)
-        return len > 0 and (avg / len) or 0
+    local avg  = 0
+    local list = statType == "EffectiveDPS"
+                    and baseSort.equippedList.weapons
+                    or  baseSort.equippedList.armor
+    for _, v in ipairs(list) do
+        local stat = v:GetStatsObjectID()
+        avg = avg + baseSort.ss:GetStatValue(stat, statType)
     end
+    local len = #list
+    return len > 0 and (avg / len) or 0
 end
 
-function baseSort.getItemLists(InventoryMaid)
+-- ---------------------------------------------------------------
+--  getItemLists(): separates inventory items into:
+--    equippedList  — kept for avg calculations only
+--    weaponList    — sell candidates
+--    armorList     — sell candidates
+--  Quest items are skipped entirely.
+-- ---------------------------------------------------------------
+function baseSort.getItemLists()
     local itemList = baseSort.ts:GetItemListByTags(baseSort.player, baseSort.slots)
     if type(itemList) == "boolean" then
         _, itemList = baseSort.ts:GetItemListByTags(baseSort.player, baseSort.slots)
@@ -89,20 +88,17 @@ function baseSort.getItemLists(InventoryMaid)
         local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
         local area       = itemRecord:EquipArea():Type().value
 
-        -- Skip base fists and default handgun slots entirely
-        if (area ~= "BaseFists") and (area ~= "VDefaultHandgun") then
+        if area ~= "BaseFists" and area ~= "VDefaultHandgun" then
             local isEquipped = baseSort.espd:IsEquipped(vItemID)
             local isQuest    = baseSort.ts:HasTag(baseSort.player, "Quest", vItemID)
 
             if isEquipped then
-                -- Always put equipped items in the equipped list for avg calculations
                 if area == "Weapon" then
                     table.insert(baseSort.equippedList.weapons, v)
                 else
                     table.insert(baseSort.equippedList.armor, v)
                 end
             elseif not isQuest then
-                -- Only non-equipped, non-quest items go into sell candidate lists
                 if area == "Weapon" then
                     table.insert(baseSort.weaponList.listAll, v)
                 else
@@ -127,87 +123,55 @@ function baseSort.sortFilter(left, right)
 end
 
 function baseSort.resetLists()
-    baseSort.equippedList  = {weapons = {}, armor = {}}
-    baseSort.weaponList    = {listAll = {}, listTypes = {}}
-    baseSort.armorList     = {listAll = {}, listTypes = {}}
+    baseSort.equippedList  = { weapons = {}, armor = {} }
+    baseSort.weaponList    = { listAll = {}, listTypes = {} }
+    baseSort.armorList     = { listAll = {}, listTypes = {} }
     baseSort.finalSellList = {}
     baseSort.nItems        = 0
 end
 
-function baseSort.printList(list)
-    for _, v in ipairs(list) do
-        print("-----------------------")
-        local vItemID    = v:GetID()
-        local statObj    = v:GetStatsObjectID()
-        local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
-        local name       = v:GetNameAsString()
-        local area       = itemRecord:EquipArea():Type().value
-        local t          = itemRecord:ItemType():Type().value
-        local quality    = baseSort.ss:GetStatValue(statObj, 'Quality')
-        local iconic     = baseSort.ss:GetStatValue(statObj, 'IsItemIconic')
-        local quest      = baseSort.ts:HasTag(baseSort.player, "Quest", vItemID)
-        print("Name = ",    name)
-        print("Area = ",    area)
-        print("Type = ",    t)
-        print("Quality = ", quality)
-        print("Iconic = ",  iconic)
-        print("Quest = ",   quest)
-        if area ~= "Weapon" then
-            print("Armor Rating: ", baseSort.ss:GetStatValue(statObj, 'Armor'))
-        else
-            print("Weapon EffectiveDPS: ", baseSort.ss:GetStatValue(statObj, 'EffectiveDPS'))
-        end
-        print("-----------------------")
-    end
-end
-
+-- ---------------------------------------------------------------
+--  removeQualitys(): removes items that don't match the user's
+--  tier filter. Iconics are always removed (protected).
+--  math.floor() normalises T1+/T1++ fractional quality values.
+-- ---------------------------------------------------------------
 function baseSort.removeQualitys(InventoryMaid, list)
     local toRemove = {}
     for _, v in pairs(list) do
         local vItemID    = v:GetID()
         local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
         local statObj    = v:GetStatsObjectID()
-        -- FIX 2.x: Use math.floor() to normalize "+" and "++" tier variants.
-        --   Tier 1   = 0    Tier 1+ = 0.x  -> floor = 0
-        --   Tier 2   = 1    Tier 2+ = 1.x  -> floor = 1
-        --   Tier 3   = 2    Tier 3+ = 2.x  -> floor = 2
-        --   Tier 4   = 3    Tier 4+ = 3.x  -> floor = 3
-        --   Tier 5   = 4    Tier 5+ = 4.x  -> floor = 4
         local quality    = math.floor(baseSort.ss:GetStatValue(statObj, 'Quality'))
         local iconic     = baseSort.ss:GetStatValue(statObj, 'IsItemIconic')
         local area       = itemRecord:EquipArea():Type().value
 
-        -- SAFETY: Always skip iconic items regardless of quality settings
         if iconic == 1 then
             table.insert(toRemove, v)
-            print("[InventoryMaid] Protecting iconic item: " .. tostring(v:GetNameAsString()))
+            print("[InventoryMaid] Protecting iconic: " .. tostring(v:GetNameAsString()))
         elseif area == "Weapon" then
-            local ws = InventoryMaid.settings.weaponSettings.sellQualitys
-            -- Keys renamed tier1-tier5 in 2.x; fall back to old key names for
-            -- users who have existing saves from the pre-2.x version of the mod
+            local sq = InventoryMaid.settings.weaponSettings.sellQualitys
             if not (
-                ((ws.tier1 or ws.common)     and quality == 0) or
-                ((ws.tier2 or ws.uncommon)   and quality == 1) or
-                ((ws.tier3 or ws.rare)       and quality == 2) or
-                ((ws.tier4 or ws.epic)       and quality == 3) or
-                ((ws.tier5 or ws.legendary)  and quality == 4)
+                ((sq.tier1 or sq.common)    and quality == 0) or
+                ((sq.tier2 or sq.uncommon)  and quality == 1) or
+                ((sq.tier3 or sq.rare)      and quality == 2) or
+                ((sq.tier4 or sq.epic)      and quality == 3) or
+                ((sq.tier5 or sq.legendary) and quality == 4)
             ) then
                 table.insert(toRemove, v)
             end
         else
-            local as = InventoryMaid.settings.armorSettings.sellQualitys
+            local sq = InventoryMaid.settings.armorSettings.sellQualitys
             if not (
-                ((as.tier1 or as.common)     and quality == 0) or
-                ((as.tier2 or as.uncommon)   and quality == 1) or
-                ((as.tier3 or as.rare)       and quality == 2) or
-                ((as.tier4 or as.epic)       and quality == 3) or
-                ((as.tier5 or as.legendary)  and quality == 4)
+                ((sq.tier1 or sq.common)    and quality == 0) or
+                ((sq.tier2 or sq.uncommon)  and quality == 1) or
+                ((sq.tier3 or sq.rare)      and quality == 2) or
+                ((sq.tier4 or sq.epic)      and quality == 3) or
+                ((sq.tier5 or sq.legendary) and quality == 4)
             ) then
                 table.insert(toRemove, v)
             end
         end
     end
-
     for _, v in pairs(toRemove) do
         tableFunctions.removeItem(list, v)
     end
@@ -241,8 +205,9 @@ end
 function baseSort.filterSellType(InventoryMaid, list, cat)
     local notSellTypes = {}
     local toRM         = {}
-    local s = cat == "Weapon" and InventoryMaid.settings.weaponSettings.typeOptions
-                               or InventoryMaid.settings.armorSettings.typeOptions
+    local s = cat == "Weapon"
+                and InventoryMaid.settings.weaponSettings.typeOptions
+                or  InventoryMaid.settings.armorSettings.typeOptions
     for _, x in ipairs(s) do
         if not x.sellType then
             table.insert(notSellTypes, x.typeName)
@@ -266,37 +231,40 @@ function baseSort.getItemSettings(InventoryMaid, item)
     local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
     local t          = itemRecord:ItemType():Type().value
     local area       = itemRecord:EquipArea():Type().value
-    local s = area == "Weapon" and InventoryMaid.settings.weaponSettings.typeOptions
-                                or InventoryMaid.settings.armorSettings.typeOptions
+    local s = area == "Weapon"
+                and InventoryMaid.settings.weaponSettings.typeOptions
+                or  InventoryMaid.settings.armorSettings.typeOptions
     for _, x in ipairs(s) do
         if t == x.typeName then return x end
     end
 end
 
 function baseSort.keepTopX(InventoryMaid, list, typeList)
-    local length = tableFunctions.getLength(list)
+    local length = #list
     local rmList = {}
-    if length ~= 0 then
-        if typeList then
-            if not baseSort.getItemSettings(InventoryMaid, list[1]).sellAll then
-                local xVal = baseSort.getItemSettings(InventoryMaid, list[1]).filterValueTopX
-                if length <= xVal then xVal = length end
-                for i = 1, length do
-                    if i > length - xVal then table.insert(rmList, list[i]) end
-                end
-            end
-        else
-            local vItemID    = list[1]:GetID()
-            local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
-            local area       = itemRecord:EquipArea():Type().value
-            local xVal = area == "Weapon" and InventoryMaid.settings.weaponSettings.filterValueTopX
-                                           or InventoryMaid.settings.armorSettings.filterValueTopX
-            if length <= xVal then xVal = length end
+    if length == 0 then return end
+
+    if typeList then
+        local settings = baseSort.getItemSettings(InventoryMaid, list[1])
+        if settings and not settings.sellAll then
+            local xVal = math.min(settings.filterValueTopX, length)
             for i = 1, length do
-                if i > length - xVal then
-                    if not baseSort.getItemSettings(InventoryMaid, list[i]).sellAll then
-                        table.insert(rmList, list[i])
-                    end
+                if i > length - xVal then table.insert(rmList, list[i]) end
+            end
+        end
+    else
+        local vItemID    = list[1]:GetID()
+        local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
+        local area       = itemRecord:EquipArea():Type().value
+        local xVal = area == "Weapon"
+                        and InventoryMaid.settings.weaponSettings.filterValueTopX
+                        or  InventoryMaid.settings.armorSettings.filterValueTopX
+        xVal = math.min(xVal, length)
+        for i = 1, length do
+            if i > length - xVal then
+                local s = baseSort.getItemSettings(InventoryMaid, list[i])
+                if s and not s.sellAll then
+                    table.insert(rmList, list[i])
                 end
             end
         end
@@ -305,31 +273,31 @@ function baseSort.keepTopX(InventoryMaid, list, typeList)
 end
 
 function baseSort.worstXPercent(InventoryMaid, list, typeList)
-    local length = tableFunctions.getLength(list)
+    local length = #list
     local rmList = {}
-    if length ~= 0 then
-        if typeList then
-            if not baseSort.getItemSettings(InventoryMaid, list[1]).sellAll then
-                local xVal = baseSort.getItemSettings(InventoryMaid, list[1]).filterValuePercent
-                xVal = length - ((xVal / 100) * length)
-                if length <= xVal then xVal = length end
-                for i = 1, length do
-                    if i > length - xVal then table.insert(rmList, list[i]) end
-                end
-            end
-        else
-            local vItemID    = list[1]:GetID()
-            local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
-            local area       = itemRecord:EquipArea():Type().value
-            local xVal = area == "Weapon" and InventoryMaid.settings.weaponSettings.filterValuePercent
-                                           or InventoryMaid.settings.armorSettings.filterValuePercent
-            xVal = length - ((xVal / 100) * length)
-            if length <= xVal then xVal = length end
+    if length == 0 then return end
+
+    if typeList then
+        local settings = baseSort.getItemSettings(InventoryMaid, list[1])
+        if settings and not settings.sellAll then
+            local xVal = math.min(length - ((settings.filterValuePercent / 100) * length), length)
             for i = 1, length do
-                if i > length - xVal then
-                    if not baseSort.getItemSettings(InventoryMaid, list[i]).sellAll then
-                        table.insert(rmList, list[i])
-                    end
+                if i > length - xVal then table.insert(rmList, list[i]) end
+            end
+        end
+    else
+        local vItemID    = list[1]:GetID()
+        local itemRecord = Game['gameRPGManager::GetItemRecord;ItemID'](vItemID)
+        local area       = itemRecord:EquipArea():Type().value
+        local pct = area == "Weapon"
+                        and InventoryMaid.settings.weaponSettings.filterValuePercent
+                        or  InventoryMaid.settings.armorSettings.filterValuePercent
+        local xVal = math.min(length - ((pct / 100) * length), length)
+        for i = 1, length do
+            if i > length - xVal then
+                local s = baseSort.getItemSettings(InventoryMaid, list[i])
+                if s and not s.sellAll then
+                    table.insert(rmList, list[i])
                 end
             end
         end
@@ -338,7 +306,7 @@ function baseSort.worstXPercent(InventoryMaid, list, typeList)
 end
 
 function baseSort.sellWorseAvg(InventoryMaid, list, typeList)
-    local length = tableFunctions.getLength(list)
+    local length = #list
     if length == 0 then return end
 
     local vItemID    = list[1]:GetID()
@@ -350,44 +318,44 @@ function baseSort.sellWorseAvg(InventoryMaid, list, typeList)
     local avgStat = baseSort.avgEquipped(statType)
 
     if typeList then
-        if not baseSort.getItemSettings(InventoryMaid, list[1]).sellAll then
-            local xVal = baseSort.getItemSettings(InventoryMaid, list[1]).filterValuePercent
+        local settings = baseSort.getItemSettings(InventoryMaid, list[1])
+        if settings and not settings.sellAll then
+            local xVal = settings.filterValuePercent
             for _, v in ipairs(list) do
                 local stat      = v:GetStatsObjectID()
                 local statValue = baseSort.ss:GetStatValue(stat, statType)
-                if statValue > (avgStat * (1 - (xVal / 100))) then
+                if statValue > (avgStat * (1 - xVal / 100)) then
                     table.insert(rmList, v)
                 end
             end
         end
     else
-        local xVal = statType == "EffectiveDPS" and InventoryMaid.settings.weaponSettings.filterValuePercent
-                                                 or InventoryMaid.settings.armorSettings.filterValuePercent
+        local xVal = statType == "EffectiveDPS"
+                        and InventoryMaid.settings.weaponSettings.filterValuePercent
+                        or  InventoryMaid.settings.armorSettings.filterValuePercent
         for _, v in ipairs(list) do
             local stat      = v:GetStatsObjectID()
             local statValue = baseSort.ss:GetStatValue(stat, statType)
-            if statValue > (avgStat * (1 - (xVal / 100))) then
-                if not baseSort.getItemSettings(InventoryMaid, v).sellAll then
+            if statValue > (avgStat * (1 - xVal / 100)) then
+                local s = baseSort.getItemSettings(InventoryMaid, v)
+                if s and not s.sellAll then
                     table.insert(rmList, v)
                 end
             end
         end
     end
-
     for _, v in pairs(rmList) do tableFunctions.removeItem(list, v) end
 end
 
 -- ---------------------------------------------------------------
---  SAFETY: Final pass — remove any item from finalSellList that
---  is equipped, has a Quest tag, or is iconic. This is the last
---  line of defense before items are actually removed.
+--  finalSafetyCheck(): last-pass validation before any item is
+--  actually removed. Catches anything that slipped through filters.
 -- ---------------------------------------------------------------
 function baseSort.finalSafetyCheck()
-    local toRemove  = {}
+    local toRemove     = {}
     local removedCount = 0
-
     for _, v in ipairs(baseSort.finalSellList) do
-        local vItemID = v:GetID()
+        local vItemID      = v:GetID()
         local safe, reason = baseSort.isSafeToSell(v, vItemID)
         if not safe then
             table.insert(toRemove, v)
@@ -396,23 +364,23 @@ function baseSort.finalSafetyCheck()
                 reason, tostring(v:GetNameAsString())))
         end
     end
-
     for _, v in pairs(toRemove) do
         tableFunctions.removeItem(baseSort.finalSellList, v)
     end
-
     if removedCount > 0 then
-        print(string.format("[InventoryMaid] Safety check removed %d protected item(s) from sell list.",
-            removedCount))
+        print(string.format("[InventoryMaid] Safety check blocked %d protected item(s).", removedCount))
     end
 end
 
+-- ---------------------------------------------------------------
+--  generateSellList(): main entry point. Resets lists, builds
+--  item candidates, applies all filters, then runs safety check.
+-- ---------------------------------------------------------------
 function baseSort.generateSellList(InventoryMaid)
     baseSort.resetLists()
     tableFunctions = require("utility/tableFunctions.lua")
     baseSort.init()
-
-    baseSort.getItemLists(InventoryMaid)
+    baseSort.getItemLists()
 
     table.sort(baseSort.weaponList.listAll, baseSort.sortFilter)
     table.sort(baseSort.armorList.listAll,  baseSort.sortFilter)
@@ -425,60 +393,39 @@ function baseSort.generateSellList(InventoryMaid)
 
     baseSort.generateTypeLists(InventoryMaid)
 
+    local function applyFilter(filterIdx, list, isTypeList)
+        if     filterIdx == 0 then baseSort.keepTopX(InventoryMaid,      list, isTypeList)
+        elseif filterIdx == 1 then baseSort.worstXPercent(InventoryMaid, list, isTypeList)
+        elseif filterIdx == 2 then baseSort.sellWorseAvg(InventoryMaid,  list, isTypeList)
+        end
+    end
+
     if InventoryMaid.settings.weaponSettings.sellPerType then
         for _, v in ipairs(InventoryMaid.settings.weaponSettings.typeOptions) do
-            if     InventoryMaid.settings.weaponSettings.sellFilter == 0 then
-                baseSort.keepTopX(InventoryMaid,      baseSort.weaponList.listTypes[v.typeName], true)
-            elseif InventoryMaid.settings.weaponSettings.sellFilter == 1 then
-                baseSort.worstXPercent(InventoryMaid, baseSort.weaponList.listTypes[v.typeName], true)
-            elseif InventoryMaid.settings.weaponSettings.sellFilter == 2 then
-                baseSort.sellWorseAvg(InventoryMaid,  baseSort.weaponList.listTypes[v.typeName], true)
-            end
-            for _, x in ipairs(baseSort.weaponList.listTypes[v.typeName]) do
-                table.insert(baseSort.finalSellList, x)
+            local tl = baseSort.weaponList.listTypes[v.typeName]
+            if tl then
+                applyFilter(InventoryMaid.settings.weaponSettings.sellFilter, tl, true)
+                for _, x in ipairs(tl) do table.insert(baseSort.finalSellList, x) end
             end
         end
     else
-        if     InventoryMaid.settings.weaponSettings.sellFilter == 0 then
-            baseSort.keepTopX(InventoryMaid,      baseSort.weaponList.listAll, false)
-        elseif InventoryMaid.settings.weaponSettings.sellFilter == 1 then
-            baseSort.worstXPercent(InventoryMaid, baseSort.weaponList.listAll, false)
-        elseif InventoryMaid.settings.weaponSettings.sellFilter == 2 then
-            baseSort.sellWorseAvg(InventoryMaid,  baseSort.weaponList.listAll, false)
-        end
-        for _, v in ipairs(baseSort.weaponList.listAll) do
-            table.insert(baseSort.finalSellList, v)
-        end
+        applyFilter(InventoryMaid.settings.weaponSettings.sellFilter, baseSort.weaponList.listAll, false)
+        for _, v in ipairs(baseSort.weaponList.listAll) do table.insert(baseSort.finalSellList, v) end
     end
 
     if InventoryMaid.settings.armorSettings.sellPerType then
         for _, v in ipairs(InventoryMaid.settings.armorSettings.typeOptions) do
-            if     InventoryMaid.settings.armorSettings.sellFilter == 0 then
-                baseSort.keepTopX(InventoryMaid,      baseSort.armorList.listTypes[v.typeName], true)
-            elseif InventoryMaid.settings.armorSettings.sellFilter == 1 then
-                baseSort.worstXPercent(InventoryMaid, baseSort.armorList.listTypes[v.typeName], true)
-            elseif InventoryMaid.settings.armorSettings.sellFilter == 2 then
-                baseSort.sellWorseAvg(InventoryMaid,  baseSort.armorList.listTypes[v.typeName], true)
-            end
-            for _, x in ipairs(baseSort.armorList.listTypes[v.typeName]) do
-                table.insert(baseSort.finalSellList, x)
+            local tl = baseSort.armorList.listTypes[v.typeName]
+            if tl then
+                applyFilter(InventoryMaid.settings.armorSettings.sellFilter, tl, true)
+                for _, x in ipairs(tl) do table.insert(baseSort.finalSellList, x) end
             end
         end
     else
-        if     InventoryMaid.settings.armorSettings.sellFilter == 0 then
-            baseSort.keepTopX(InventoryMaid,      baseSort.armorList.listAll, false)
-        elseif InventoryMaid.settings.armorSettings.sellFilter == 1 then
-            baseSort.worstXPercent(InventoryMaid, baseSort.armorList.listAll, false)
-        elseif InventoryMaid.settings.armorSettings.sellFilter == 2 then
-            baseSort.sellWorseAvg(InventoryMaid,  baseSort.armorList.listAll, false)
-        end
-        for _, v in ipairs(baseSort.armorList.listAll) do
-            table.insert(baseSort.finalSellList, v)
-        end
+        applyFilter(InventoryMaid.settings.armorSettings.sellFilter, baseSort.armorList.listAll, false)
+        for _, v in ipairs(baseSort.armorList.listAll) do table.insert(baseSort.finalSellList, v) end
     end
 
-    -- SAFETY: Final pass to block any equipped/quest/iconic items
-    -- that slipped through filters
     baseSort.finalSafetyCheck()
 end
 

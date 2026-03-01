@@ -143,11 +143,13 @@ function grenades.preview(InventoryMaid)
 end
 
 function grenades.sellGrenades(InventoryMaid)
-    grenades.handleGrenadeType(InventoryMaid, "sell")
+    local _, before, after = grenades.handleGrenadeType(InventoryMaid, "sell")
+    return before - after
 end
 
 function grenades.disassembleGrenades(InventoryMaid)
-    grenades.handleGrenadeType(InventoryMaid, "disassemble")
+    local _, before, after = grenades.handleGrenadeType(InventoryMaid, "disassemble")
+    return before - after
 end
 
 return grenades

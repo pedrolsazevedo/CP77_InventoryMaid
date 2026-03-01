@@ -30,6 +30,10 @@ registerForEvent("onInit", function()
     InventoryMaid.baseUI      = require("ui/baseUI.lua")
     tableFunctions            = require("utility/tableFunctions.lua")
 
+    -- CODE QUALITY: init() loads all 6 UI submodules once here.
+    -- Previously each was require()'d inside baseUI.Draw() every frame.
+    InventoryMaid.baseUI.init()
+
     drawWindow                  = false
     drawWindowOneFrameSell      = false
     drawWindowOneFrameDissasemble = false
@@ -128,16 +132,16 @@ end)
 
 registerForEvent("onDraw", function()
     if drawWindow then
-        baseUI.Draw(InventoryMaid)
+        InventoryMaid.baseUI.Draw(InventoryMaid)
     elseif drawWindowOneFrameSell then
-        baseUI.Draw(InventoryMaid)
-        baseUI.generalUI.previewText = "Sold!"
-        baseUI.generalUI.sell.sell(InventoryMaid)
+        InventoryMaid.baseUI.Draw(InventoryMaid)
+        InventoryMaid.baseUI.generalUI.lastSummary = "Sold!"
+        InventoryMaid.baseUI.generalUI.sell.sell(InventoryMaid)
         drawWindowOneFrameSell = false
     elseif drawWindowOneFrameDissasemble then
-        baseUI.Draw(InventoryMaid)
-        baseUI.generalUI.previewText = "Disassembled!"
-        baseUI.generalUI.sell.disassemble(InventoryMaid)
+        InventoryMaid.baseUI.Draw(InventoryMaid)
+        InventoryMaid.baseUI.generalUI.lastSummary = "Disassembled!"
+        InventoryMaid.baseUI.generalUI.sell.disassemble(InventoryMaid)
         drawWindowOneFrameDissasemble = false
     end
 end)

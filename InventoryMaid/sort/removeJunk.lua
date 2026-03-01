@@ -219,9 +219,11 @@ function removeJunk.sellJunkType(tpe, percent)
             Game.AddToInventory("Items.money", moneyGained)
             print(string.format("[InventoryMaid] Sold %d junk (%s) for %d credits.", itemCnt, tpe, moneyGained))
         end
+        return itemCnt
     end)
     if not ok then
         print("[InventoryMaid] ERROR in sellJunkType(" .. tpe .. "): " .. tostring(err))
+        return 0
     end
 end
 
@@ -251,9 +253,11 @@ function removeJunk.dissasembleJunkType(tpe, percent)
         if count > 0 then
             print(string.format("[InventoryMaid] Disassembled %d junk (%s).", count, tpe))
         end
+        return count
     end)
     if not ok then
         print("[InventoryMaid] ERROR in dissasembleJunkType(" .. tpe .. "): " .. tostring(err))
+        return 0
     end
 end
 
@@ -322,31 +326,31 @@ function removeJunk.preview(InventoryMaid)
 end
 
 function removeJunk.sellJunk(InventoryMaid)
+    local total = 0
     if InventoryMaid.settings.junkSettings[1].sellType then
-        removeJunk.sellJunkType("junk", InventoryMaid.settings.junkSettings[1].percent)
+        total = total + (removeJunk.sellJunkType("junk",      InventoryMaid.settings.junkSettings[1].percent) or 0)
     end
-
     if InventoryMaid.settings.junkSettings[2].sellType then
-        removeJunk.sellJunkType("alcohol", InventoryMaid.settings.junkSettings[2].percent)
+        total = total + (removeJunk.sellJunkType("alcohol",   InventoryMaid.settings.junkSettings[2].percent) or 0)
     end
-
     if InventoryMaid.settings.junkSettings[3].sellType then
-        removeJunk.sellJunkType("jewellery", InventoryMaid.settings.junkSettings[3].percent)
+        total = total + (removeJunk.sellJunkType("jewellery", InventoryMaid.settings.junkSettings[3].percent) or 0)
     end
+    return total
 end
 
 function removeJunk.dissasembleJunk(InventoryMaid)
+    local total = 0
     if InventoryMaid.settings.junkSettings[1].sellType then
-        removeJunk.dissasembleJunkType("junk", InventoryMaid.settings.junkSettings[1].percent)
+        total = total + (removeJunk.dissasembleJunkType("junk",      InventoryMaid.settings.junkSettings[1].percent) or 0)
     end
-
     if InventoryMaid.settings.junkSettings[2].sellType then
-        removeJunk.dissasembleJunkType("alcohol", InventoryMaid.settings.junkSettings[2].percent)
+        total = total + (removeJunk.dissasembleJunkType("alcohol",   InventoryMaid.settings.junkSettings[2].percent) or 0)
     end
-
     if InventoryMaid.settings.junkSettings[3].sellType then
-        removeJunk.dissasembleJunkType("jewellery", InventoryMaid.settings.junkSettings[3].percent)
+        total = total + (removeJunk.dissasembleJunkType("jewellery", InventoryMaid.settings.junkSettings[3].percent) or 0)
     end
+    return total
 end
 
 return removeJunk
