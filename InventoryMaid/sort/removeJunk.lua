@@ -192,7 +192,10 @@ removeJunk.items = {
 }
 
 function removeJunk.sellJunkType(tpe, percent)
-    local ok, err = pcall(function()
+    -- pcall returns (true, returnValue) on success, (false, errorMsg) on failure.
+    -- BUG FIX: was named 'err' so the return value was silently discarded;
+    -- renamed to 'result' and forwarded so sellJunk() totals are correct.
+    local ok, result = pcall(function()
         local ts      = Game.GetTransactionSystem()
         local player  = Game.GetPlayer()
         local itemCnt = 0
@@ -201,7 +204,6 @@ function removeJunk.sellJunkType(tpe, percent)
             local itemTDBID = TweakDBID.new(v)
             local itemID    = ItemID.new(itemTDBID)
 
-            -- SAFETY: Skip if this junk item has a Quest tag (e.g. story-critical items)
             if ts:HasTag(player, "Quest", itemID) then
                 print("[InventoryMaid] Skipping quest junk item: " .. v)
             else
@@ -213,22 +215,22 @@ function removeJunk.sellJunkType(tpe, percent)
             end
         end
 
-        local moneyGained = 0
         if itemCnt > 0 then
-            moneyGained = removeJunk.price[tpe] * itemCnt
+            local moneyGained = removeJunk.price[tpe] * itemCnt
             Game.AddToInventory("Items.money", moneyGained)
             print(string.format("[InventoryMaid] Sold %d junk (%s) for %d credits.", itemCnt, tpe, moneyGained))
         end
         return itemCnt
     end)
     if not ok then
-        print("[InventoryMaid] ERROR in sellJunkType(" .. tpe .. "): " .. tostring(err))
+        print("[InventoryMaid] ERROR in sellJunkType(" .. tpe .. "): " .. tostring(result))
         return 0
     end
+    return result or 0
 end
 
 function removeJunk.dissasembleJunkType(tpe, percent)
-    local ok, err = pcall(function()
+    local ok, result = pcall(function()
         local craftingSystem = Game.GetScriptableSystemsContainer():Get(CName.new('CraftingSystem'))
         local ts     = Game.GetTransactionSystem()
         local player = Game.GetPlayer()
@@ -238,7 +240,6 @@ function removeJunk.dissasembleJunkType(tpe, percent)
             local itemTDBID = TweakDBID.new(v)
             local itemID    = ItemID.new(itemTDBID)
 
-            -- SAFETY: Skip quest-tagged junk
             if ts:HasTag(player, "Quest", itemID) then
                 print("[InventoryMaid] Skipping quest junk item: " .. v)
             else
@@ -256,9 +257,10 @@ function removeJunk.dissasembleJunkType(tpe, percent)
         return count
     end)
     if not ok then
-        print("[InventoryMaid] ERROR in dissasembleJunkType(" .. tpe .. "): " .. tostring(err))
+        print("[InventoryMaid] ERROR in dissasembleJunkType(" .. tpe .. "): " .. tostring(result))
         return 0
     end
+    return result or 0
 end
 
 function removeJunk.previewType(tpe, percent)
@@ -292,35 +294,42 @@ function removeJunk.previewType(tpe, percent)
 end
 
 function removeJunk.preview(InventoryMaid)
-    info = {count = 0, money = 0, afterCount = 0}
-    j1 = {count = 0, money = 0, afterCount = 0}
-    j2 = {count = 0, money = 0, afterCount = 0}
-    j3 = {count = 0, money = 0, afterCount = 0}
+    -- BUG FIX: info/j1/j2/j3/x were bare globals; now all local.
+    local info = {count = 0, money = 0, afterCount = 0}
+    local j1   = {count = 0, money = 0, afterCount = 0}
+    local j2   = {count = 0, money = 0, afterCount = 0}
+    local j3   = {count = 0, money = 0, afterCount = 0}
+
     if InventoryMaid.settings.junkSettings[1].sellType then
         j1 = removeJunk.previewType("junk", InventoryMaid.settings.junkSettings[1].percent)
     else
-        x = removeJunk.previewType("junk", InventoryMaid.settings.junkSettings[1].percent)
-        j1.count = x.count
+        -- BUG FIX: when type is disabled we still need the total count for the
+        -- "before" number, but afterCount == count (nothing will be sold).
+        local x = removeJunk.previewType("junk", InventoryMaid.settings.junkSettings[1].percent)
+        j1.count     = x.count
         j1.afterCount = x.count
     end
 
     if InventoryMaid.settings.junkSettings[2].sellType then
         j2 = removeJunk.previewType("alcohol", InventoryMaid.settings.junkSettings[2].percent)
     else
-        x = removeJunk.previewType("alcohol", InventoryMaid.settings.junkSettings[1].percent)
-        j2.count = x.count
+        -- BUG FIX: was using junkSettings[1].percent instead of [2]
+        local x = removeJunk.previewType("alcohol", InventoryMaid.settings.junkSettings[2].percent)
+        j2.count     = x.count
         j2.afterCount = x.count
     end
 
     if InventoryMaid.settings.junkSettings[3].sellType then
         j3 = removeJunk.previewType("jewellery", InventoryMaid.settings.junkSettings[3].percent)
     else
-        x = removeJunk.previewType("jewellery", InventoryMaid.settings.junkSettings[1].percent)
-        j3.count = x.count
+        -- BUG FIX: was using junkSettings[1].percent instead of [3]
+        local x = removeJunk.previewType("jewellery", InventoryMaid.settings.junkSettings[3].percent)
+        j3.count     = x.count
         j3.afterCount = x.count
     end
-    info.count = j1.count + j2.count + j3.count
-    info.money = j1.money + j2.money + j3.money
+
+    info.count     = j1.count     + j2.count     + j3.count
+    info.money     = j1.money     + j2.money     + j3.money
     info.afterCount = j1.afterCount + j2.afterCount + j3.afterCount
     return info
 end
